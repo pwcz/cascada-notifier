@@ -15,6 +15,8 @@ class CascadaNotifier:
         self.bs4_data = None
         self.raw_data = []
         self.f_name = "http_dump.txt"
+        self.json_file = 'data.json'
+        self.json_obj = None
 
     def _download_data(self):
         print("download data")
@@ -45,21 +47,46 @@ class CascadaNotifier:
         hours = np.ones(23, dtype=int)
         for reserv in self.raw_data:
             if data in reserv['start']:
-                print(reserv)
+                # print(reserv)
                 start_date = int(reserv['start'].replace(data + "T", "").split(":")[0])
                 stop_date = int(reserv['end'].replace(data + "T", "").split(":")[0])
                 for idx in range(start_date, stop_date):
                     hours[idx] = 0
-                print([x for x in range(start_date, stop_date)])
-        print(np.where((hours > 0) & (hours >= minimum) & (hours <= maximum)))
+        return list(np.where((hours > 0) & (hours >= minimum) & (hours <= maximum)))[0]
+
+    def _seach_week_for_empty_reservation(self):
+        now = datetime.datetime.now()
+        reserv_dict = {}
+        for _ in range(0, 7):
+            if now.weekday() > 3:
+                now += datetime.timedelta(days=3)
+                continue
+            check_date = now.strftime("%Y-%m-%d")
+            available_hours = self._get_empty_slots(check_date, minimum=0)
+            reserv_dict[check_date] = available_hours
+            now += datetime.timedelta(days=1)
+        print(reserv_dict)
+        data2send = self._update_json(reserv_dict)
+        self._send_notification(data2send)
+
+    def _update_json(self, reserv):
+        message = []
+        if self.json_obj is None:
+            with open(self.json_file, "r") as file:
+                self.json_obj = json.loads(file.read())
+                print("self.json_obj = ", self.json_obj)
+        for key, items in reserv.items():
+            if not key in self.json_obj:
+                
+
+        return message
+
+    def _send_notification(self, message):
+        pass
 
     def test(self):
         self._decode()
-        # for idx, data in enumerate(self.raw_data):
-        #     print(data)
-        #     if idx is 18:
-        #         break
-        self._get_empty_slots("2018-02-21", minimum=0)
+        self._seach_week_for_empty_reservation()
 
 
 if __name__ == "__main__":
