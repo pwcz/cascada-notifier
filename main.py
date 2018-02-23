@@ -6,6 +6,7 @@ import base64
 import os.path
 import numpy as np
 import datetime
+from collections import defaultdict
 
 
 class CascadaNotifier:
@@ -40,19 +41,17 @@ class CascadaNotifier:
             m = open(self.f_name, 'r').read()
         regex = r"\{(.*?)\}"
         matches = re.finditer(regex, m, re.MULTILINE | re.DOTALL)
-        for x in matches:
-            self.raw_data.append(json.loads(x.group(0)))
+        self.raw_data = [json.loads(x.group(0)) for x in matches]
 
     def _get_empty_slots(self, data, minimum=17, maximum=20):
-        hours = np.ones(23, dtype=int)
+        hours = np.arange(1, 24, dtype=np.uint8)
         for reserv in self.raw_data:
             if data in reserv['start']:
-                # print(reserv)
                 start_date = int(reserv['start'].replace(data + "T", "").split(":")[0])
                 stop_date = int(reserv['end'].replace(data + "T", "").split(":")[0])
                 for idx in range(start_date, stop_date):
                     hours[idx] = 0
-        return list(np.where((hours > 0) & (hours >= minimum) & (hours <= maximum)))[0]
+        return np.where((hours >= minimum) & (hours <= maximum))[0].tolist()
 
     def _seach_week_for_empty_reservation(self):
         now = datetime.datetime.now()
@@ -62,27 +61,35 @@ class CascadaNotifier:
                 now += datetime.timedelta(days=3)
                 continue
             check_date = now.strftime("%Y-%m-%d")
-            available_hours = self._get_empty_slots(check_date, minimum=0)
+            available_hours = self._get_empty_slots(check_date, minimum=10)
             reserv_dict[check_date] = available_hours
             now += datetime.timedelta(days=1)
         print(reserv_dict)
         data2send = self._update_json(reserv_dict)
+        print(data2send)
         self._send_notification(data2send)
 
     def _update_json(self, reserv):
-        message = []
+        message = defaultdict(list)
         if self.json_obj is None:
             with open(self.json_file, "r") as file:
                 self.json_obj = json.loads(file.read())
                 print("self.json_obj = ", self.json_obj)
-        for key, items in reserv.items():
-            if not key in self.json_obj:
-                
 
+        for key, items in reserv.items():
+            if key not in self.json_obj:
+                self.json_obj[key] = []
+            for day in items:
+                if day not in self.json_obj[key]:
+                    message[key].append(day)
+                    self.json_obj[key].append(day)
+        with open(self.json_file, "w+") as file:
+            json.dump(self.json_obj, file)
         return message
 
     def _send_notification(self, message):
-        pass
+        for key, items in message.items():
+            print(key, " ".join([str(x) for x in items]))
 
     def test(self):
         self._decode()
