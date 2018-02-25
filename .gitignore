@@ -106,3 +106,4 @@ http_dump.txt
 #pycharm
 .idea/
 data.json
+config.json
