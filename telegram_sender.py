@@ -1,3 +1,4 @@
+__author__ = "pwcz"
 import json
 import logging
 from time import sleep

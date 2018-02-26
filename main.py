@@ -3,8 +3,10 @@ import bs4
 from urllib.request import Request, urlopen
 import re
 import json
+import signal
+import sys
 import base64
-import os.path
+from time import sleep
 import numpy as np
 import datetime
 from collections import defaultdict
@@ -31,30 +33,25 @@ class CascadaNotifier:
             return json.loads(file.read())
 
     def _download_data(self):
-        print("download data")
+        logger.info("download data")
         req = Request(self.url_link)
         code_html = urlopen(req).read().decode()
         self.bs4_data = bs4.BeautifulSoup(code_html, "lxml")
 
     def _decode(self):
-        if not os.path.isfile(self.f_name):
-            self._download_data()
-            data = bs4.BeautifulStoneSoup.select(self.bs4_data, "script")[18].text
-            regex = re.compile(r"events: \[([^]]+)\]")
-            m = str(regex.search(data).groups()[0])
-            replace_t = (("id", "\"id\""), ("title", "\"title\""), ("start", "\"start\""), ("end", "\"end\""),
-                         ("'", "\""), (" ", ""))
-            for a1, a2 in replace_t:
-                m = m.replace(a1, a2)
-            with open(self.f_name, "w+") as file:
-                file.write(m)
-        else:
-            m = open(self.f_name, 'r').read()
+        self._download_data()
+        data = bs4.BeautifulStoneSoup.select(self.bs4_data, "script")[18].text
+        regex = re.compile(r"events: \[([^]]+)\]")
+        m = str(regex.search(data).groups()[0])
+        replace_t = (("id", "\"id\""), ("title", "\"title\""), ("start", "\"start\""), ("end", "\"end\""),
+                     ("'", "\""), (" ", ""))
+        for a1, a2 in replace_t:
+            m = m.replace(a1, a2)
         regex = r"\{(.*?)\}"
         matches = re.finditer(regex, m, re.MULTILINE | re.DOTALL)
         self.raw_data = [json.loads(x.group(0)) for x in matches]
 
-    def _get_empty_slots(self, data, minimum=17, maximum=20):
+    def _get_empty_slots(self, data, minimum=17, maximum=21):
         hours = np.arange(1, 24, dtype=np.uint8)
         for reserv in self.raw_data:
             if data in reserv['start']:
@@ -94,16 +91,26 @@ class CascadaNotifier:
 
     def _send_notification(self, message):
         data = "\n".join([key + ": " + " ".join([str(x) for x in items]) for key, items in message.items()])
+        logger.info("message = %s", data)
         self.telegram.send_messages(data)
 
-    def test(self):
-        self._decode()
+    def run(self):
         self.telegram.start()
-        self._seach_week_for_empty_reservation()
-        self.telegram.stop()
+        while True:
+            if 6 < datetime.datetime.now().hour < 22:
+                self._decode()
+                self._seach_week_for_empty_reservation()
+            sleep(60*10)
+
+
+def signal_handler(_, __):
+    logger.info("NOTIFIER STOP")
+    notifier_obj.telegram.stop()
+    sys.exit(0)
 
 
 if __name__ == "__main__":
     logger.info("Start cascada-notifier")
-    _test = CascadaNotifier()
-    _test.test()
+    notifier_obj = CascadaNotifier()
+    signal.signal(signal.SIGINT, signal_handler)
+    notifier_obj.run()
