@@ -1,7 +1,7 @@
 python-telegram-bot==9.0.0
 beautifulsoup4==4.6.0
 get==0.0.39
-lxml==4.6.5
+lxml==4.9.1
 numpy==1.22.0
 post==0.0.26
 public==0.0.65
